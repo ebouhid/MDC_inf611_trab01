@@ -4,7 +4,7 @@
 # Trabalho 1 - Recuperação de Texto                                  #
 ######################################################################
 # Nome COMPLETO dos integrantes do grupo:                            #
-#   - Anderson Soares                                                #
+#   - Anderson Luis Bento Soares                                     #
 #   - Eduardo Bouhid                                                 #
 #   - Mateus Coelho                                                  #
 #                                                                    #
@@ -96,24 +96,34 @@ computa_resultados <- function(query, ground_truth, stats, stat_name,
                                top, text) {
   # Criando ranking (função do arquivo base)
   # Dica: você pode acessar a segunda coluna da query a partir de $word ou [["word"]]
-  ranking <- get_ranking_by_stats(...)
+  ranking <- get_ranking_by_stats(stat_name, stats, query$word)
   # Visualizando o ranking (apenas para debuging)
   # head(ranking, n = 5)
   
+  # Ids dos documentos na ordem do ranking. O doc_id é um fator
+  # ordenado; convertemos para character para indexar o ground_truth
+  # pelo nome da coluna (ex.: "Article_0308"), e não pelo código
+  # interno do fator, que pode não bater com a ordem das colunas
+  # do relevance.csv (ex.: se algum documento sumir após o
+  # processamento na Questão 3)
+  ranking_ids <- as.character(ranking$doc_id)
+
   # Calculando a precisão
   # Dica: para calcular a precisão, revocação e utilizar a função plot_prec_e_rev,
   # utilize a coluna doc_id do ranking gerado (você pode acessar com $doc_id)
-  p <- ...
+  p <- precision(ground_truth, ranking_ids, top)
 
   # Calculando a revocação
-  r <- ...
+  r <- recall(ground_truth, ranking_ids, top)
 
   # Imprimindo os valores de precisão e revocação
   cat(paste("Consulta: ", query[1,1], "\nPrecisão: ", p, 
             "\tRevocação: ", r, "\n"))
   
   # Gerando o plot Precisão + Revocação (função do arquivo base)
-  plot_prec_e_rev(...) 
+  # print() garante que o gráfico apareça também quando o arquivo
+  # é executado via source()
+  print(plot_prec_e_rev(ranking_ids, ground_truth, top, text))
 }
 
 # Definindo a consulta 1 
@@ -122,8 +132,12 @@ computa_resultados <- function(query, ground_truth, stats, stat_name,
 # o exemplo da linha 52 e 53.
 # Para a variável n_consulta1, você deve informar o número da consulta. Por exemplo,
 # se usar a Query_01 como consulta, n_consulta1 deve receber o valor 1.
-consulta1 <- ...
-n_consulta1 <- ...
+# Consulta 1 escolhida: Query_06 (9 documentos relevantes)
+# "ceremonial suicides committed by some buddhist monks in south
+#  viet nam and what they are seeking to gain by such acts ."
+# @Matheus: usar as mesmas consultas (6 e 33) na Questão 3
+consulta1 <- queries[queries$doc_id == "Query_06",]
+n_consulta1 <- 6
 
 ## Exemplo de uso da função computa_resultados:
 # computa_resultados(consulta1, ground_truths[n_consulta1, ], 
@@ -131,21 +145,32 @@ n_consulta1 <- ...
 #                    top = 20, "titulo")
 
 # Resultados para a consulta 1 e tf_idf
-computa_resultados(...)
+computa_resultados(consulta1, ground_truths[n_consulta1, ],
+                   docs_stats, "tf_idf",
+                   top = 20, "- Q2 - Consulta 6 - tf-idf")
 
 # Resultados para a consulta 1 e bm25
-computa_resultados(...)
+computa_resultados(consulta1, ground_truths[n_consulta1, ],
+                   docs_stats, "bm25",
+                   top = 20, "- Q2 - Consulta 6 - bm25")
 
 
 # Definindo a consulta 2 
-consulta2 <- ...
-n_consulta2 <- ...
+# Consulta 2 escolhida: Query_033 (18 documentos relevantes)
+# "president de gaulle's policy on british entry into the
+#  common market ."
+consulta2 <- queries[queries$doc_id == "Query_033",]
+n_consulta2 <- 33
 
 # Resultados para a consulta 2 e tf_idf
-computa_resultados(...)
+computa_resultados(consulta2, ground_truths[n_consulta2, ],
+                   docs_stats, "tf_idf",
+                   top = 20, "- Q2 - Consulta 33 - tf-idf")
 
 # Resultados para a consulta 2 e bm25
-computa_resultados(...)
+computa_resultados(consulta2, ground_truths[n_consulta2, ],
+                   docs_stats, "bm25",
+                   top = 20, "- Q2 - Consulta 33 - bm25")
 
 
 ######################################################################
@@ -153,10 +178,38 @@ computa_resultados(...)
 # Questão 2 - Escreva sua análise abaixo
 #
 ######################################################################
+# (b)(i) Consultas escolhidas: Query_06 (9 relevantes) e Query_033
+# (18 relevantes). P@k e R@k são a precisão e a revocação nos k
+# primeiros do ranking; AP@20 é a precisão média em k = 20.
 #
+#   Consulta  Modelo   P@5   P@10  P@20  R@10  R@20  AP@20
+#   6         tf-idf   0.60  0.40  0.45  0.44  1.00  0.51
+#   6         bm25     0.80  0.80  0.45  0.89  1.00  0.92
+#   33        tf-idf   1.00  0.90  0.55  0.50  0.61  0.58
+#   33        bm25     0.80  0.90  0.70  0.50  0.78  0.64
 #
+# O bm25 teve o melhor resultado nas duas consultas.
 #
+# Na consulta 6, precisão e revocação em k = 20 empatam (0.45 e 1.0), pois os dois modelos trazem os 9 relevantes entre os 20 primeiros. 
+# A diferença está na ordem: o bm25 coloca 8 dos 9 relevantes nas 9 primeiras posições (P@10 = 0.80, R@10 = 0.89), 
+# enquanto o tf-idf espalha os relevantes até a posição 20 (P@10 = 0.40, R@10 = 0.44). 
+# Isso aparece nos gráficos: a curva de revocação do bm25 chega a 1.0 em k = 11, e a do tf-idf só em k = 20. A precisão média (AP@20), que
+# leva em conta a posição dos relevantes, é 0.92 no bm25 contra 0.51 no tf-idf.
 #
+# Na consulta 33, o tf-idf começa melhor (P@5 = 1.0 contra 0.8) e os dois empatam em k = 10 (P@10 = 0.90). Entre as posições 11 e 20, o
+# bm25 encontra mais 5 relevantes e o tf-idf só mais 2: em k = 20 o bm25 recupera 14 dos 18 relevantes contra 11 do tf-idf (P@20 = 0.70
+# contra 0.55, R@20 = 0.78 contra 0.61). O AP@20 também é maior no bm25 (0.64 contra 0.58).
+#
+# A diferença vem da forma como cada modelo pesa a frequência do termo. No tf-idf do udpipe, o tf é a frequência dividida pelo
+# tamanho do documento e cresce linearmente. Isso favorece documentos curtos e documentos que repetem muito um único termo da consulta.
+# No bm25, a frequência satura (k = 1.2), ou seja, cada repetição do mesmo termo soma cada vez menos ao peso, e o tamanho do documento
+# pesa menos (b = 0.75, relativo ao tamanho médio). O bm25 favorece documentos que contêm vários termos diferentes da consulta.
+#
+# Os rankings mostram os dois efeitos. Na consulta 6, as posições 1 e 3 do tf-idf são documentos irrelevantes curtos, com 203 e 167
+# tokens, cujo termo de maior peso é "viet". Já os 9 relevantes têm em média 1043 tokens (a média da coleção é 585), e o bm25 sobe
+# relevantes longos, como um de 2500 tokens na posição 3. Na consulta 33, dos 6 documentos que só o tf-idf coloca no top-20, 5
+# têm a maior parte do peso vinda do termo "de" e só 1 é relevante, dos 6 que só o bm25 coloca no top-20, 4 são relevantes e contêm
+# mais termos distintos da consulta (5 a 9, contra 4 ou 5).
 
 ######################################################################
 #

@@ -237,41 +237,136 @@ queries_proc <- process_data("queries.txt", "XX-Find [[:alnum:]]",
 # head(queries_proc)
 
 # Computando a matriz de termo-documento
-term_freq_proc <- ...
+term_freq_proc <- document_term_frequencies(x = docs_proc, document = "doc_id", term = "word")
 
 # Computando as estatísticas da coleção e convertendo em data.frame
-docs_stats_proc <- ...
+# Mesmos k e b da Questão 1, para que a única diferença seja a
+# remoção de stopwords
+docs_stats_proc <- as.data.frame(document_term_frequencies_statistics(x = term_freq_proc, k = 1.2, b = 0.75))
 
 
-# Definindo a consulta 1 
-consulta1_proc <- ...
-n_consulta1_proc <- ...
+# Definindo a consulta 1
+# Mesmas consultas da Questão 2 (Query_06 e Query_033)
+consulta1_proc <- queries_proc[queries_proc$doc_id == "Query_06",]
+n_consulta1_proc <- 6
 # Resultados para a consulta 1 e tf_idf
-computa_resultados(...)
+computa_resultados(consulta1_proc, ground_truths[n_consulta1_proc, ],
+                   docs_stats_proc, "tf_idf",
+                   top = 20, "- Q3 - Consulta 6 - tf-idf (sem stopwords)")
 
 # Resultados para a consulta 1 e bm25
-computa_resultados(...)
+computa_resultados(consulta1_proc, ground_truths[n_consulta1_proc, ],
+                   docs_stats_proc, "bm25",
+                   top = 20, "- Q3 - Consulta 6 - bm25 (sem stopwords)")
 
 
-# Definindo a consulta 2 
-consulta2_proc <- ...
-n_consulta2_proc <- ...
+# Definindo a consulta 2
+consulta2_proc <- queries_proc[queries_proc$doc_id == "Query_033",]
+n_consulta2_proc <- 33
 
 # Resultados para a consulta 2 e tf_idf
-computa_resultados(...)
+computa_resultados(consulta2_proc, ground_truths[n_consulta2_proc, ],
+                   docs_stats_proc, "tf_idf",
+                   top = 20, "- Q3 - Consulta 33 - tf-idf (sem stopwords)")
 
 # Resultados para a consulta 2 e bm25
-computa_resultados(...)
+computa_resultados(consulta2_proc, ground_truths[n_consulta2_proc, ],
+                   docs_stats_proc, "bm25",
+                   top = 20, "- Q3 - Consulta 33 - bm25 (sem stopwords)")
+
+
+# (a)(ii) Média das precisões médias em k = 20 sobre todas as
+# consultas de avaliação, para tf-idf e bm25, com e sem stopwords.
+# A i-ésima linha do relevance.csv corresponde à consulta "Query_0<i>".
+
+# Ids dos documentos ordenados por uma estatística para uma consulta.
+# Se o ranking tiver menos de k documentos (poucos documentos contêm
+# os termos da consulta), completamos com os demais documentos da
+# coleção, que não pontuaram e ficam, portanto, no fim do ranking.
+# Isso evita índices NA ao acessar o ground_truth nas posições 1:k.
+ranking_completo <- function(query, stats, stat_name) {
+  if (nrow(query) == 0) return(names(ground_truths))
+  ids <- as.character(get_ranking_by_stats(stat_name, stats, query$word)$doc_id)
+  c(ids, setdiff(names(ground_truths), ids))
+}
+
+# MAP@k de um modelo (estatística + coleção processada ou não)
+map_modelo <- function(queries, stats, stat_name, k = 20) {
+  pares <- lapply(seq_len(nrow(ground_truths)), function(i) {
+    query <- queries[queries$doc_id == paste0("Query_0", i), ]
+    list(ground_truths[i, ], ranking_completo(query, stats, stat_name))
+  })
+  map(pares, k)
+}
+
+resultados_map <- data.frame(
+  modelo = c("tf-idf", "bm25", "tf-idf", "bm25"),
+  stopwords = c("com", "com", "sem", "sem"),
+  map_20 = c(map_modelo(queries, docs_stats, "tf_idf"),
+             map_modelo(queries, docs_stats, "bm25"),
+             map_modelo(queries_proc, docs_stats_proc, "tf_idf"),
+             map_modelo(queries_proc, docs_stats_proc, "bm25"))
+)
+print(resultados_map)
 
 ######################################################################
 #
 # Questão 3 - Escreva sua análise abaixo
 #
 ######################################################################
-# 
-# 
-# 
-# 
+# (a)(i) Mesmas consultas da Questão 2 (Query_06 e Query_033), antes
+# e depois da remoção de stopwords (k = 20 e mesmos k e b do bm25).
+#
+#   Consulta  Modelo  Stopwords   P@5   P@10  P@20  R@10  R@20  AP@20
+#   6         tf-idf  mantidas    0.60  0.40  0.45  0.44  1.00  0.51
+#   6         tf-idf  removidas   0.60  0.50  0.45  0.56  1.00  0.52
+#   6         bm25    mantidas    0.80  0.80  0.45  0.89  1.00  0.92
+#   6         bm25    removidas   1.00  0.90  0.45  1.00  1.00  0.95
+#   33        tf-idf  mantidas    1.00  0.90  0.55  0.50  0.61  0.58
+#   33        tf-idf  removidas   1.00  0.90  0.55  0.50  0.61  0.57
+#   33        bm25    mantidas    0.80  0.90  0.70  0.50  0.78  0.64
+#   33        bm25    removidas   0.80  0.90  0.70  0.50  0.78  0.67
+#
+# Em k = 20, a remoção de stopwords não mudou a precisão nem a revocação de nenhum dos dois modelos:
+# os mesmos relevantes continuam entre os 20 primeiros (na consulta 6, todos os 9; na 33, 11 no tf-idf e 14 no bm25).
+# O impacto aparece na ordem dentro do top-20, visível nos k menores e no AP@20.
+#
+# Na consulta 6 (removidas: "by", "some", "in", "and", "what", "they", "are", "to", "such"), os dois modelos melhoram.
+# O bm25 passa a colocar 9 relevantes nas 10 primeiras posições (P@10 de 0.80 para 0.90, R@10 de 0.89 para 1.00, AP@20 de 0.92 para 0.95).
+# O tf-idf ganha um relevante na posição 10 (P@10 de 0.40 para 0.50, R@10 de 0.44 para 0.56), mas os dois documentos irrelevantes curtos
+# do topo (Article_0154 e Article_0419) continuam nas posições 1 e 3, pois o peso deles vem do termo "viet", que não é stopword.
+#
+# Na consulta 33 (removidas: "on", "into", "the"), precisão e revocação ficam iguais em todos os k mostrados, e só o AP@20 muda:
+# sobe no bm25 (0.64 para 0.67) e cai levemente no tf-idf (0.58 para 0.57).
+# O termo "de", que dominava o tf-idf nessa consulta (ver Questão 2), não está na lista de stopwords do tidytext e continua na consulta,
+# por isso o tf-idf praticamente não muda.
+#
+# O efeito é pequeno porque as stopwords mais comuns já têm idf quase nulo: "the" tem idf 0, "in" e "to" 0.002, "and" 0.007.
+# Elas quase não somam pontos a nenhum documento. As que pesam são as menos frequentes, como "such" (idf 1.35), "what" (0.98) e "some" (0.79).
+# Essas adicionam ruído, pontuando documentos que não tratam do tema. Além disso, a remoção muda o tamanho dos documentos (de 585 para 288 tokens em média),
+# o que altera o tf normalizado do tf-idf e a normalização por tamanho do bm25, e reordena documentos mesmo sem mudar quais estão no top-20.
+#
+# (a)(ii) Média das precisões médias (MAP) em k = 20 nas 59 consultas do relevance.csv.
+# A precisão média de cada consulta divide pelo total de relevantes (até 20), então um relevante fora do ranking conta como perdido.
+#
+#   Modelo  Stopwords   MAP@20
+#   tf-idf  mantidas    0.477
+#   tf-idf  removidas   0.488
+#   bm25    mantidas    0.571
+#   bm25    removidas   0.588
+#
+# O melhor método foi o bm25 com remoção de stopwords (MAP@20 = 0.588). A escolha do modelo pesa muito mais que o pré-processamento.
+# Trocar tf-idf por bm25 aumenta o MAP em cerca de 0.10 nos dois cenários.
+# Consulta a consulta, o bm25 tem AP@20 maior que o tf-idf em 39 das 59 consultas com stopwords (perde em 12, empata em 8)
+# e em 41 sem stopwords (perde em 8, empata em 10).
+# A explicação é a da Questão 2: a saturação da frequência e a normalização pelo tamanho médio favorecem documentos
+# que contêm vários termos da consulta, em vez de documentos curtos que repetem um único termo.
+#
+# A remoção de stopwords dá um ganho menor, mas consistente nos dois modelos: +0.011 no tf-idf e +0.017 no bm25.
+# No bm25, o AP@20 melhora em 24 consultas, piora em 11 e fica igual em 24.
+# No tf-idf, melhora em 25, piora em 14 e fica igual em 20.
+# Como as stopwords mais frequentes já têm idf quase zero, o ganho vem de tirar as de idf mais alto, que trazem ruído,
+# e de medir o tamanho dos documentos só pelas palavras com conteúdo.
 
 
 ######################################################################
